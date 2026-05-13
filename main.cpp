@@ -193,6 +193,22 @@ public:
         //      For all other sites Pj (optionally, only k nearest neighbors) :
         //          Clip it with bisector of [Pi,Pj]
         //      (Lab 3, fluids) : also clip it by a disk of radius sqrt(w_i - w_air) centered at Pi
+
+        cells.clear();
+        cells.resize(points.size());
+#pragma omp parallel for schedule(dynamic)
+        for (int i = 0; i < points.size(); i++) {
+            double x = points[i][0], y = points[i][1];
+            cells[i].vertices.push_back(Vector(x - 0.5, y - 0.5));
+            cells[i].vertices.push_back(Vector(x + 0.5, y - 0.5));
+            cells[i].vertices.push_back(Vector(x + 0.5, y + 0.5));
+            cells[i].vertices.push_back(Vector(x - 0.5, y + 0.5));
+
+            for (int j = 0; j < points.size(); j++) {
+                if (i == j) continue;
+                cells[i] = clip_by_bisector(cells[i], points[i], points[j], 0., 0.);
+            }
+        }
     }
 
 
@@ -203,7 +219,6 @@ public:
         // Will be used to clip a polygon (a cell) by all the edges of a (discretized) disk
 
         Polygon result;
-
         return result;
     }
 
@@ -211,10 +226,33 @@ public:
 
         // TODO Lab 1 (Voronoi) : in Lab 1, we assume w0 = w1 = 0
         // Clip a polygon by the bisector of the segment defined by P0 (the current site of the Voronoi cell being computed) and Pi (another site)
-        
+
         // TODO Lab 2 (Semi-Discrete Optimal Transport) : extend to Laguerre cells, i.e., w0 != w1
 
         Polygon result;
+        for (int i = 0; i < V.vertices.size(); i++) {
+            Vector v1 = V.vertices[i];
+            Vector v2 = V.vertices[i == V.vertices.size() - 1 ? 0 : i + 1];
+
+            bool inside1 = (v1 - P0).norm2() <= (v1 - Pi).norm2();
+            bool inside2 = (v2 - P0).norm2() <= (v2 - Pi).norm2();
+
+            if (inside1 && inside2) result.vertices.push_back(v2);
+            else if (inside1 && !inside2) {
+                Vector M = (P0 + Pi) * 0.5;
+                double t = dot(M - v1, Pi - P0) / dot(v2 - v1, Pi - P0);
+                Vector P = v1 + t * (v2 - v1);
+
+                result.vertices.push_back(P);
+            } else if (!inside1 && inside2) {
+                Vector M = (P0 + Pi) * 0.5;
+                double t = dot(M - v1, Pi - P0) / dot(v2 - v1, Pi - P0);
+                Vector P = v1 + t * (v2 - v1);
+
+                result.vertices.push_back(P);
+                result.vertices.push_back(v2);
+            }
+        }
 
         return result;
     }
@@ -336,7 +374,7 @@ public:
 };
 
 // saves a static svg file. The polygon vertices are supposed to be in the range [0..1], and a canvas of size 1000x1000 is created
-void save_svg(const std::vector<Polygon>& polygons, std::string filename, std::string fillcol = "none") {
+void save_svg(const std::vector<Polygon>& polygons, std::string filename, const std::vector<Vector>* points = NULL, std::string fillcol = "none") {
     FILE* f = fopen(filename.c_str(), "w+");
     fprintf(f, "<svg xmlns = \"http://www.w3.org/2000/svg\" width = \"1000\" height = \"1000\">\n");
     for (int i = 0; i < polygons.size(); i++) {
@@ -348,18 +386,22 @@ void save_svg(const std::vector<Polygon>& polygons, std::string filename, std::s
         fprintf(f, "\"\nfill = \"%s\" stroke = \"black\"/>\n", fillcol.c_str());
         fprintf(f, "</g>\n");
     }
+
+    if (points) {
+        fprintf(f, "<g>\n");
+        for (int i = 0; i < points->size(); i++) {
+            fprintf(f, "<circle cx = \"%3.3f\" cy = \"%3.3f\" r = \"3\" />\n", (*points)[i][0] * 1000., 1000. - (*points)[i][1] * 1000);
+        }
+        fprintf(f, "</g>\n");
+
+    }
+
     fprintf(f, "</svg>\n");
     fclose(f);
 }
 
-
-
-
-
-
-
 int main() {
-
+/*
     Polygon p;
     p.vertices.push_back(Vector(0.1, 0.2));
     p.vertices.push_back(Vector(0.6, 0.4));
@@ -368,8 +410,19 @@ int main() {
 
     std::vector<Polygon> s;
     s.push_back(p);
+*/
 
-    save_frame(s, "toto");
-    save_svg(s, "toto.svg");
+    VoronoiDiagram vore;
+
+    vore.points = {
+        Vector(0.1, 0.2),
+        Vector(0.6, 0.4),
+        Vector(0.5, 0.7),
+        Vector(0.2, 0.5)
+    };
+    vore.compute();
+
+    save_frame(vore.cells, "toto");
+    save_svg(vore.cells, "toto.svg", &vore.points);
     return 0;
 }
