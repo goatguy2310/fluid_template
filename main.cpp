@@ -225,7 +225,6 @@ public:
     std::vector<double> weights;   // Lab 2 (OT) : the weight associated to each site (the Laguerre weight, i.e. the dual optimal transport variables to be optimized)
     
     std::vector<Polygon> cells;   // Lab 1 : the polygons representing each individual cell
-
 };
 
 
