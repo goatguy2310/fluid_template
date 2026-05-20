@@ -316,7 +316,6 @@ static int progress(
     return 0;
 }
 
-
 // Lab 2
 void OptimalTransport::optimize() {
 
