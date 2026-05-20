@@ -52,16 +52,24 @@ Vector operator/(const Vector& a, const double b) {
 double dot(const Vector& a, const Vector& b) {
     return a[0] * b[0] + a[1] * b[1];
 }
-
+double tri_area(const Vector& a, const Vector& b, const Vector& c) {
+    Vector u = b - a, v = c - a;
+    return 0.5 * (u[0] * v[1] - u[1] * v[0]);
+}
 
 class Polygon {
 public:
 
     double area() {
         if (vertices.size() < 3) return 0;
-        // TODO Lab 3
+        // TODO Lab 2
         // Compute the area of the polygon
-        return -111;
+        double A = 0.;
+        for (int i = 0; i < vertices.size(); i++) {
+            int j = (i + 1) % vertices.size();
+            A += (vertices[i][0] * vertices[j][1] - vertices[j][0] * vertices[i][1]);
+        }
+        return abs(A) * 0.5;
     }
 
     Vector centroid() {
@@ -75,10 +83,23 @@ public:
     double integral_square_distance(const Vector& Pi) {
         if (vertices.size() < 3) return 0;
 
-        // TODO Lab 3
+        // TODO Lab 2
         // Compute the integral of ||x-Pi||^2 over the polygon
 
-        return -111;
+        double ret = 0.;
+        for (int i = 1; i < vertices.size() - 1; i++) {
+            Vector c[3] = {vertices[0], vertices[i], vertices[i + 1]};
+            double tri = 0.;
+            for (int j = 0; j < 3; j++) {
+                for (int k = j; k < 3; k++) {
+                    tri += dot(c[j] - Pi, c[k] - Pi);
+                }
+            }
+            tri *= tri_area(c[0], c[1], c[2]) / 6.;
+            ret += tri;
+        }
+
+        return ret;
     }
 
     std::vector<Vector> vertices;
@@ -199,14 +220,14 @@ public:
 #pragma omp parallel for schedule(dynamic)
         for (int i = 0; i < points.size(); i++) {
             double x = points[i][0], y = points[i][1];
-            cells[i].vertices.push_back(Vector(x - 0.5, y - 0.5));
-            cells[i].vertices.push_back(Vector(x + 0.5, y - 0.5));
-            cells[i].vertices.push_back(Vector(x + 0.5, y + 0.5));
-            cells[i].vertices.push_back(Vector(x - 0.5, y + 0.5));
+            cells[i].vertices.push_back(Vector(0, 1));
+            cells[i].vertices.push_back(Vector(1, 1));
+            cells[i].vertices.push_back(Vector(1, 0));
+            cells[i].vertices.push_back(Vector(0, 0));
 
             for (int j = 0; j < points.size(); j++) {
                 if (i == j) continue;
-                cells[i] = clip_by_bisector(cells[i], points[i], points[j], 0., 0.);
+                cells[i] = clip_by_bisector(cells[i], points[i], points[j], weights[i], weights[j]);
             }
         }
     }
@@ -234,23 +255,21 @@ public:
             Vector v1 = V.vertices[i];
             Vector v2 = V.vertices[i == V.vertices.size() - 1 ? 0 : i + 1];
 
-            bool inside1 = (v1 - P0).norm2() <= (v1 - Pi).norm2();
-            bool inside2 = (v2 - P0).norm2() <= (v2 - Pi).norm2();
+            bool inside1 = (v1 - P0).norm2() - w0 <= (v1 - Pi).norm2() - wi;
+            bool inside2 = (v2 - P0).norm2() - w0 <= (v2 - Pi).norm2() - wi;
 
             if (inside1 && inside2) result.vertices.push_back(v2);
-            else if (inside1 && !inside2) {
+            else if (inside1 ^ inside2) {
                 Vector M = (P0 + Pi) * 0.5;
+
+                M = M + (w0 - wi) / (2. * (P0 - Pi).norm2()) * (Pi - P0); // sutherland-hodgman
                 double t = dot(M - v1, Pi - P0) / dot(v2 - v1, Pi - P0);
                 Vector P = v1 + t * (v2 - v1);
 
                 result.vertices.push_back(P);
-            } else if (!inside1 && inside2) {
-                Vector M = (P0 + Pi) * 0.5;
-                double t = dot(M - v1, Pi - P0) / dot(v2 - v1, Pi - P0);
-                Vector P = v1 + t * (v2 - v1);
-
-                result.vertices.push_back(P);
-                result.vertices.push_back(v2);
+                if (!inside1 && inside2) {
+                    result.vertices.push_back(v2);
+                }
             }
         }
 
@@ -300,6 +319,16 @@ static lbfgsfloatval_t evaluate(
     lbfgsfloatval_t fx = 0.0;
     // g[i] = ...
     // fx = ...
+
+    for (int i = 0; i < n; i++) {
+        Vector& v = ot->vor.points[i];
+        Polygon& p = ot->vor.cells[i];
+        double w = ot->vor.weights[i];
+
+        g[i] = -1. / n + p.area();
+        fx += p.integral_square_distance(v) - w * p.area() + 1. / n * w;
+    }
+    fx = -fx;
 
     return fx;
 }
@@ -419,9 +448,14 @@ int main() {
         Vector(0.5, 0.7),
         Vector(0.2, 0.5)
     };
+    vore.weights = {1, 2, 3, 4};
     vore.compute();
 
-    save_frame(vore.cells, "toto");
-    save_svg(vore.cells, "toto.svg", &vore.points);
+    OptimalTransport ot;
+    ot.vor = vore;
+    ot.optimize();
+
+    save_frame(ot.vor.cells, "toto");
+    save_svg(ot.vor.cells, "toto.svg", &ot.vor.points);
     return 0;
 }
