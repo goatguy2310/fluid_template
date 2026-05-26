@@ -3,6 +3,7 @@ CC = gcc
 CXXFLAGS = -I. -fopenmp -O3
 CFLAGS = -I. -O3
 LDFLAGS = -fopenmp
+DEBUG = -g
 
 C_SRCS = $(wildcard *.c)
 CXX_SRCS = $(wildcard *.cpp)
@@ -15,13 +16,13 @@ TARGET = main
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CXX) $(LDFLAGS) -o $@ $^
+	$(CXX) $(LDFLAGS) $(DEBUG) -o $@ $^
 
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(DEBUG) -c $< -o $@
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(DEBUG) -c $< -o $@
 
 clean:
 	rm -rf $(TARGET) $(OBJS)
