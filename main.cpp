@@ -365,7 +365,6 @@ void OptimalTransport::optimize() {
     vor.compute();
 }
 
-
 // Lab 3 (fluids)
 class Fluid {
 public:
@@ -448,7 +447,7 @@ int main() {
         Vector(0.5, 0.7),
         Vector(0.2, 0.5)
     };
-    vore.weights = {1, 2, 3, 4};
+    vore.weights = {1, 2, 10, 100};
     vore.compute();
 
     OptimalTransport ot;
