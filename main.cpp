@@ -74,9 +74,10 @@ public:
     }
 
     Vector centroid() {
-        if (vertices.size() < 3) return Vector(0, 0);
         // TODO Lab 3
         // Compute the centroid of the polygon
+
+        if (vertices.size() < 3) return Vector(0, 0);
         Vector ret(0., 0.);
         double A = 0.;
         for (int i = 0; i < vertices.size(); i++) {
@@ -435,16 +436,24 @@ void OptimalTransport::optimize() {
 class Fluid {
 public:
     Fluid(int N_particles = 1000) : N_particles(N_particles) {
-        fluid_volume = 0.5;
-        ot.fluid_volume = fluid_volume;
 
         std::default_random_engine rng(67);
         std::uniform_real_distribution<double> dist(0, 1);
 
+        // initializing the points to be in a circle and calculate fluid volume
+        double R = 0.3;
+        Vector center(0.5, 0.5);
+        fluid_volume = M_PI * R * R;
+        ot.fluid_volume = fluid_volume;
+
         for (int i = 0; i < N_particles; i++) {
-            double x = dist(rng);
-            double y = dist(rng);
-            particles.push_back(Vector(x, y));
+            Vector v(dist(rng), dist(rng));
+
+            while ((v - center).norm2() > R * R) {
+                v[0] = dist(rng);
+                v[1] = dist(rng);
+            }
+            particles.push_back(v);
             velocities.push_back(Vector(0., 0.));
         }
 
@@ -456,7 +465,7 @@ public:
     void time_step(double dt) {
 
         double epsilon2 = 0.004 * 0.004;
-        Vector g(0, -9.81 * 10);
+        Vector g(0, -9.81);
         double m_i = 200;
 
         // TODO Lab 3 : 
@@ -473,11 +482,11 @@ public:
 
             for (int d = 0; d < 2; d++) {
                 if (particles[i][d] < 0.) {
-                    particles[i][d] = 0.;
-                    velocities[i][d] *= -1.;
+                    particles[i][d] = 1e-4;
+                    velocities[i][d] = 0.;
                 } else if (particles[i][d] > 1.) {
-                    particles[i][d] = 1.;
-                    velocities[i][d] *= -1;
+                    particles[i][d] = 1 - 1e-4;
+                    velocities[i][d] = 0.;
                 }
             }
         }
