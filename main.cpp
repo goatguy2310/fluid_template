@@ -1,5 +1,6 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <random>
@@ -235,33 +236,40 @@ public:
         double w_air = weights.back();
 #pragma omp parallel for schedule(dynamic)
         for (int i = 0; i < points.size(); i++) {
-            double x = points[i][0], y = points[i][1];
-            cells[i].vertices.push_back(Vector(0, 1));
-            cells[i].vertices.push_back(Vector(1, 1));
-            cells[i].vertices.push_back(Vector(1, 0));
-            cells[i].vertices.push_back(Vector(0, 0));
-
-            for (int j = 0; j < points.size(); j++) {
-                if (i == j) continue;
-                cells[i] = clip_by_bisector(cells[i], points[i], points[j], weights[i], weights[j]);
-            }
+            Polygon cell;
+            cell.vertices.push_back(Vector(0, 1));
+            cell.vertices.push_back(Vector(1, 1));
+            cell.vertices.push_back(Vector(1, 0));
+            cell.vertices.push_back(Vector(0, 0));
 
             double radius2 = weights[i] - w_air;
-            if (radius2 <= 0.) {
-                cells[i].vertices.clear();
-                continue;
+            if (radius2 <= 0.) continue;
+            double radius = std::sqrt(radius2);
+
+            // only clip against the k nearest particles
+            int k = std::min(80, (int)points.size() - 1);
+            std::vector<std::pair<double, int>> knn;
+            knn.reserve(points.size() - 1);
+            for (int j = 0; j < points.size(); j++) {
+                if (i == j) continue;
+                knn.emplace_back((points[i] - points[j]).norm2(), j);
+            }
+            std::nth_element(knn.begin(), knn.begin() + k, knn.end());
+            for (int nn = 0; nn < k; nn++) {
+                int j = knn[nn].second;
+                cell = clip_by_bisector(cell, points[i], points[j], weights[i], weights[j]);
             }
 
-            double radius = std::sqrt(radius2);
             Vector cur = points[i] + Vector(radius, 0.);
             Vector nxt;
             int iterations = 32;
             for (int it = 0; it < iterations; it++) {
                 double nxt_theta = 2. * M_PI * ((it + 1) % iterations) / iterations;
                 nxt = points[i] + Vector(radius * std::cos(nxt_theta), radius * std::sin(nxt_theta));
-                cells[i] = clip_by_edge(cells[i], cur, nxt);
+                cell = clip_by_edge(cell, cur, nxt);
                 cur = nxt;
             }
+            cells[i] = cell;
         }
     }
 
@@ -421,6 +429,7 @@ void OptimalTransport::optimize() {
     lbfgs_parameter_t param;
     // Initialize the parameters for the L-BFGS optimization.
     lbfgs_parameter_init(&param);
+    param.epsilon = 1e-3;
 
     // run the LBFGS optimizer
     int ret = lbfgs(weights.size(), &weights[0], &fx, evaluate, progress, (void*)this, &param);
